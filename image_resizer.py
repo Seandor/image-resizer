@@ -14,6 +14,7 @@ class ImageResizerApp:
         # Default format
         self.format_options = ["JPG", "PNG", "WEBP"]
         self.selected_format = tk.StringVar(value="JPG")
+        self.max_size_var = tk.StringVar(value="1000")
 
         # Configure main window
         self.setup_ui()
@@ -26,26 +27,39 @@ class ImageResizerApp:
         self.root.grid_columnconfigure(0, weight=1)
         main_frame.grid_columnconfigure(0, weight=1)
 
-        # Select folder button
-        self.select_btn = ttk.Button(
-            main_frame,
-            text="选择文件夹",
-            command=self.select_folder
-        )
-        self.select_btn.grid(row=0, column=0, pady=(10, 5), sticky="ew")
+        # Controls frame for better alignment
+        controls_frame = ttk.Frame(main_frame)
+        controls_frame.grid(row=0, column=0, pady=(10, 0), sticky="n")
+        controls_frame.grid_columnconfigure(0, weight=1)
 
-        # Output format dropdown
-        format_label = ttk.Label(main_frame, text="输出格式 (Output Format):")
-        format_label.grid(row=1, column=0, sticky="ew", pady=(5, 0))
+        # Select folder button (first)
+        self.select_btn = ttk.Button(
+            controls_frame,
+            text="选择文件夹",
+            command=self.select_folder,
+            width=22
+        )
+        self.select_btn.grid(row=0, column=0, pady=(0, 10), sticky="ew")
+
+        # Output format label and dropdown (second)
+        format_label = ttk.Label(controls_frame, text="输出格式 (Output Format):")
+        format_label.grid(row=1, column=0, sticky="w", pady=(0, 0))
         self.format_combo = ttk.Combobox(
-            main_frame,
+            controls_frame,
             textvariable=self.selected_format,
             values=self.format_options,
-            state="readonly"
+            state="readonly",
+            width=22
         )
-        self.format_combo.grid(row=2, column=0, sticky="ew")
+        self.format_combo.grid(row=2, column=0, sticky="ew", pady=(0, 10))
         self.format_combo.set("JPG")
         self.format_combo_tooltip = CreateToolTip(self.format_combo, "选择导出图片格式，默认为JPG (Select export format, default is JPG)")
+
+        # Max size label and entry (third)
+        maxsize_label = ttk.Label(controls_frame, text="最大尺寸 (Max Size, px):")
+        maxsize_label.grid(row=3, column=0, sticky="w", pady=(0, 0))
+        self.maxsize_entry = ttk.Entry(controls_frame, textvariable=self.max_size_var, width=22, justify="center")
+        self.maxsize_entry.grid(row=4, column=0, sticky="ew", pady=(0, 10))
 
         # Progress bar
         self.progress_var = tk.DoubleVar()
@@ -54,7 +68,7 @@ class ImageResizerApp:
             variable=self.progress_var,
             maximum=100
         )
-        self.progress_bar.grid(row=3, column=0, sticky="ew", pady=10)
+        self.progress_bar.grid(row=1, column=0, sticky="ew", pady=10)
 
         # Status label
         self.status_var = tk.StringVar(value="请选择要处理的图片文件夹")
@@ -62,7 +76,7 @@ class ImageResizerApp:
             main_frame,
             textvariable=self.status_var
         )
-        self.status_label.grid(row=4, column=0, pady=10, sticky="ew")
+        self.status_label.grid(row=2, column=0, pady=10, sticky="ew")
 
     def select_folder(self):
         folder_path = filedialog.askdirectory(title="选择图片文件夹")
@@ -93,11 +107,19 @@ class ImageResizerApp:
         format_ext_map = {"JPG": ".jpg", "PNG": ".png", "WEBP": ".webp"}
         pil_format_map = {"JPG": "JPEG", "PNG": "PNG", "WEBP": "WEBP"}
 
+        # Get max size from entry, fallback to 1000 if invalid
+        try:
+            max_size = int(self.max_size_var.get())
+            if max_size <= 0:
+                raise ValueError
+        except Exception:
+            max_size = 1000
+
         for img_path in image_files:
             try:
                 self.status_var.set(f"处理中: {os.path.basename(img_path)} ({processed+1}/{total_files})")
                 self.root.update()
-                self.resize_image(img_path, output_format, format_ext_map, pil_format_map)
+                self.resize_image(img_path, output_format, format_ext_map, pil_format_map, max_size)
                 processed += 1
                 progress = (processed / total_files) * 100
                 self.progress_var.set(progress)
@@ -108,11 +130,10 @@ class ImageResizerApp:
         self.status_var.set("请选择要处理的图片文件夹")
         self.progress_var.set(0)
 
-    def resize_image(self, image_path, output_format, format_ext_map, pil_format_map):
+    def resize_image(self, image_path, output_format, format_ext_map, pil_format_map, max_size):
         with Image.open(image_path) as img:
             # Calculate new dimensions
             width, height = img.size
-            max_size = 1000
 
             if width <= max_size and height <= max_size:
                 # Still convert format if needed
@@ -226,6 +247,9 @@ def main():
         pass
 
     app = ImageResizerApp(root)
+    # Set a minimum window width for harmony
+    root.update_idletasks()
+    root.minsize(340, root.winfo_height())
     root.mainloop()
 
 if __name__ == "__main__":
