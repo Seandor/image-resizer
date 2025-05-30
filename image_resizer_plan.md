@@ -1,95 +1,57 @@
-# Image Resizer Tool - Implementation Plan
+# Image Resizer UX Improvement Plan
 
-## 1. Architecture Overview
+## Objective
+Enhance the user experience of the Image Resizer app by allowing users to select the export format (defaulting to JPG), while continuing to overwrite the original images in the input folder.
+
+---
+
+## Features & Improvements
+
+### 1. Output Format Selection
+- Add a dropdown (ttk.Combobox) to the main window for selecting the output format: **JPG** (default), **PNG**, **WEBP**.
+- The selected format will be used for all processed images.
+
+### 2. Default to JPG
+- The dropdown will default to **JPG**. If the user does not change it, all images will be exported as JPG.
+
+### 3. Overwrite Originals
+- Resized images will overwrite the originals in the input folder, using the selected format and updating the file extension as needed.
+
+### 4. Improved Progress and Status Feedback
+- The status label will show which file is currently being processed.
+- The progress bar and completion message will remain.
+
+### 5. General UX Enhancements
+- Add tooltips or help text for the new format selection control.
+- Use clear, descriptive labels for all controls.
+
+---
+
+## Proposed UI Layout
 
 ```mermaid
-graph TD
-    A[Main GUI Window] --> B[Folder Selection Dialog]
-    B --> C[Image Scanner]
-    C --> D[Image Processor]
-    D --> E[Progress Tracker]
-    E --> F[Completion Notice]
-
-    subgraph Components
-        B[Folder Selection Dialog]
-        C[Image Scanner<br/>- Detect JPG/PNG/WebP]
-        D[Image Processor<br/>- Resize to 1000px max<br/>- Maintain aspect ratio]
-        E[Progress Tracker<br/>- Show processing status]
-        F[Completion Notice]
-    end
+flowchart TD
+    A[Main Window]
+    A --> B[Select Input Folder Button]
+    A --> C[Output Format Dropdown (JPG/PNG/WEBP)]
+    A --> D[Progress Bar]
+    A --> E[Status Label]
 ```
 
-## 2. Technical Stack
-- **Language**: Python 3.x
-- **Key Libraries**:
-  - `tkinter` - GUI framework
-  - `Pillow` (PIL) - Image processing
-  - `PyInstaller` - EXE creation
+---
 
-## 3. Component Details
+## Implementation Steps
 
-### 3.1 GUI Interface
-- Simple window with:
-  - "Select Folder" button
-  - Progress bar
-  - Status label
-- Uses `tkinter.filedialog` for folder selection
+1. Add a ttk.Combobox for format selection, defaulting to JPG.
+2. Update the `resize_image` method to use the selected format and save with the correct extension.
+3. Update the UI to show the current file being processed.
+4. Refactor status/progress updates for clarity.
+5. Add tooltips/help text for new controls.
 
-### 3.2 Image Scanner
-- Scans selected directory (top-level only)
-- Filters for supported formats (.jpg, .jpeg, .png, .webp)
-- Returns list of valid image paths
+---
 
-### 3.3 Image Processor
-- Takes image path list
-- For each image:
-  1. Opens with PIL
-  2. Calculates new dimensions maintaining aspect ratio
-  3. Performs resize operation
-  4. Saves back to original location
-  - Handles errors gracefully
+## Notes
 
-### 3.4 Progress Tracking
-- Shows progress bar during processing
-- Updates status text for current operation
-- Displays final completion message
-
-## 4. Implementation Steps
-
-1. **Setup Project Structure**
-   - Create main script `image_resizer.py`
-   - Set up virtual environment
-   - Install required packages
-
-2. **Create GUI Interface**
-   - Implement main window
-   - Add folder selection
-   - Create progress display
-
-3. **Implement Core Logic**
-   - Image scanning functionality
-   - Resize operation handler
-   - Error handling
-
-4. **Add Progress Tracking**
-   - Progress bar updates
-   - Status messages
-   - Completion notification
-
-5. **Package as EXE**
-   - Create PyInstaller spec
-   - Bundle dependencies
-   - Generate standalone executable
-
-## 5. Error Handling
-- Invalid image files
-- Read/write permission issues
-- Insufficient disk space
-- Corrupted images
-
-## 6. Testing Plan
-1. Test with various image formats
-2. Test with different folder structures
-3. Test with different image sizes
-4. Verify aspect ratio maintenance
-5. Test error scenarios
+- The app will continue to overwrite original images in the input folder.
+- No output folder selection will be added at this time.
+- The README should be updated with new usage instructions after implementation.
