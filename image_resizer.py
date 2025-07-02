@@ -8,13 +8,14 @@ class ImageResizerApp:
     def __init__(self, root):
         self.root = root
         self.root.title("Image Resizer")
-        self.root.geometry("420x240")
+        self.root.geometry("420x280")
         self.root.resizable(False, False)
 
         # Default format
         self.format_options = ["JPG", "PNG", "WEBP"]
         self.selected_format = tk.StringVar(value="JPG")
         self.max_size_var = tk.StringVar(value="1000")
+        self.overwrite_var = tk.BooleanVar(value=True)  # 默认覆盖原文件
 
         # Configure main window
         self.setup_ui()
@@ -60,6 +61,15 @@ class ImageResizerApp:
         maxsize_label.grid(row=3, column=0, sticky="w", pady=(0, 0))
         self.maxsize_entry = ttk.Entry(controls_frame, textvariable=self.max_size_var, width=22, justify="center")
         self.maxsize_entry.grid(row=4, column=0, sticky="ew", pady=(0, 10))
+
+        # Overwrite checkbox (fourth)
+        self.overwrite_checkbox = ttk.Checkbutton(
+            controls_frame,
+            text="覆盖原文件 (Overwrite original files)",
+            variable=self.overwrite_var
+        )
+        self.overwrite_checkbox.grid(row=5, column=0, sticky="w", pady=(0, 10))
+        self.overwrite_tooltip = CreateToolTip(self.overwrite_checkbox, "选中时覆盖原文件，取消时在子文件夹中保存 (Check to overwrite originals, uncheck to save in subfolder)")
 
         # Progress bar
         self.progress_var = tk.DoubleVar()
@@ -126,54 +136,126 @@ class ImageResizerApp:
             except Exception as e:
                 messagebox.showerror("错误", f"处理图片时出错: {img_path}\n{str(e)}")
 
-        messagebox.showinfo("完成", f"所有图片处理完成！\n共处理 {processed} 个文件")
+        # 显示完成消息
+        if self.overwrite_var.get():
+            message = f"所有图片处理完成！\n共处理 {processed} 个文件\n文件已覆盖原位置"
+        else:
+            message = f"所有图片处理完成！\n共处理 {processed} 个文件\n文件已保存到: resized_images_square 文件夹"
+        messagebox.showinfo("完成", message)
         self.status_var.set("请选择要处理的图片文件夹")
         self.progress_var.set(0)
 
     def resize_image(self, image_path, output_format, format_ext_map, pil_format_map, max_size):
         with Image.open(image_path) as img:
-            # Calculate new dimensions
+            # Step 1: 如果图片超过max_size，先按比例缩放
             width, height = img.size
+            
+            if width > max_size or height > max_size:
+                # 按比例缩放到max_size以内
+                if width > height:
+                    new_width = max_size
+                    new_height = int(max_size * height / width)
+                else:
+                    new_height = max_size
+                    new_width = int(max_size * width / height)
+                img = img.resize((new_width, new_height), Image.Resampling.LANCZOS)
+                width, height = new_width, new_height
+            
+            # Step 2: 智能正方形策略
+            square_img = self.create_smart_square(img, width, height)
+            
+            # Step 3: 保存正方形图片
+            self.save_with_format(square_img, image_path, output_format, format_ext_map, pil_format_map)
 
-            if width <= max_size and height <= max_size:
-                # Still convert format if needed
-                self.save_with_format(img, image_path, output_format, format_ext_map, pil_format_map)
-                return
-
-            # Calculate aspect ratio
-            aspect_ratio = width / height
-
-            if width > height:
-                new_width = max_size
-                new_height = int(max_size / aspect_ratio)
+    def create_smart_square(self, img, width, height):
+        """智能创建正方形图片：根据长宽比选择拉伸或填充策略"""
+        # 计算长宽比
+        aspect_ratio = max(width, height) / min(width, height)
+        square_size = max(width, height)
+        
+        if aspect_ratio <= 1.2:
+            # 长宽比差距较小：直接拉伸 (变形不明显)
+            return img.resize((square_size, square_size), Image.Resampling.LANCZOS)
+        else:
+            # 长宽比差距较大：白色填充居中 (保持比例)
+            # 创建白色正方形画布
+            if img.mode in ('RGBA', 'LA'):
+                # 对于有透明通道的图片，先创建RGBA画布
+                square_canvas = Image.new('RGBA', (square_size, square_size), (255, 255, 255, 255))
             else:
-                new_height = max_size
-                new_width = int(max_size * aspect_ratio)
-
-            # Resize image
-            resized_img = img.resize((new_width, new_height), Image.Resampling.LANCZOS)
-            self.save_with_format(resized_img, image_path, output_format, format_ext_map, pil_format_map)
+                square_canvas = Image.new('RGB', (square_size, square_size), (255, 255, 255))
+            
+            # 计算居中位置
+            paste_x = (square_size - width) // 2
+            paste_y = (square_size - height) // 2
+            
+            # 将原图粘贴到画布中心
+            if img.mode == 'RGBA':
+                square_canvas.paste(img, (paste_x, paste_y), img)
+            else:
+                square_canvas.paste(img, (paste_x, paste_y))
+            
+            return square_canvas
 
     def save_with_format(self, img, orig_path, output_format, format_ext_map, pil_format_map):
-        # Overwrite original file, but update extension if needed
-        dir_name = os.path.dirname(orig_path)
-        base_name = os.path.splitext(os.path.basename(orig_path))[0]
-        new_ext = format_ext_map[output_format]
-        new_path = os.path.join(dir_name, base_name + new_ext)
+        # 获取输出路径
+        new_path = self.get_output_path(orig_path, output_format, format_ext_map)
         pil_format = pil_format_map[output_format]
         save_kwargs = {"quality": 95, "optimize": True} if pil_format == "JPEG" else {}
 
-        # Convert RGBA/LA to RGB if saving as JPEG
-        if pil_format == "JPEG" and img.mode in ("RGBA", "LA"):
-            img = img.convert("RGB")
+        # 处理透明通道和图片模式兼容性
+        img = self.handle_transparency(img, pil_format)
 
         img.save(new_path, pil_format, **save_kwargs)
-        # If the extension changed, remove the old file
-        if new_path != orig_path and os.path.exists(orig_path):
+        
+        # 只有在覆盖模式且文件扩展名改变时才删除原文件
+        if self.overwrite_var.get() and new_path != orig_path and os.path.exists(orig_path):
             try:
                 os.remove(orig_path)
             except Exception:
                 pass
+
+    def handle_transparency(self, img, pil_format):
+        """处理透明通道和不兼容的图片模式"""
+        if pil_format == "JPEG":
+            if img.mode in ("RGBA", "LA"):
+                # 处理透明通道：创建白色背景
+                background = Image.new('RGB', img.size, (255, 255, 255))
+                if img.mode == "RGBA":
+                    background.paste(img, mask=img.split()[-1])  # 使用alpha通道作为mask
+                elif img.mode == "LA":
+                    background.paste(img, mask=img.split()[-1])  # 使用alpha通道作为mask
+                return background
+            elif img.mode == "P":
+                # 处理调色板模式：转换为RGB
+                if "transparency" in img.info:
+                    # 如果有透明度信息，先转换为RGBA再处理透明背景
+                    img = img.convert("RGBA")
+                    background = Image.new('RGB', img.size, (255, 255, 255))
+                    background.paste(img, mask=img.split()[-1])
+                    return background
+                else:
+                    # 直接转换为RGB
+                    return img.convert("RGB")
+            elif img.mode not in ("RGB", "L"):
+                # 其他不兼容模式直接转换为RGB
+                return img.convert("RGB")
+        return img
+
+    def get_output_path(self, orig_path, output_format, format_ext_map):
+        """获取输出文件路径"""
+        dir_name = os.path.dirname(orig_path)
+        base_name = os.path.splitext(os.path.basename(orig_path))[0]
+        new_ext = format_ext_map[output_format]
+        
+        if self.overwrite_var.get():
+            # 覆盖模式：在原位置
+            return os.path.join(dir_name, base_name + new_ext)
+        else:
+            # 非覆盖模式：创建子文件夹
+            output_dir = os.path.join(dir_name, "resized_images_square")
+            os.makedirs(output_dir, exist_ok=True)
+            return os.path.join(output_dir, base_name + new_ext)
 
 # Tooltip helper class
 class CreateToolTip(object):
